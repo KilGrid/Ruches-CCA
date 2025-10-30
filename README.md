@@ -40,15 +40,13 @@ L’alimentation est assurée par un **HAT solaire UPS DFRobot FIT0992**.
 
 ---
 
-## ⚙️ Installation (nouveau Raspberry Pi)
-
-### 1️⃣ Cloner le projet
-```bash
+🧩 Installation complète
+1️⃣ Cloner le dépôt
 cd ~
 git clone https://github.com/KilGrid/Ruches-CCA.git ruches-connectees
 cd ruches-connectees
 
-2️⃣ Créer l’environnement virtuel
+2️⃣ Créer l’environnement virtuel Python
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip setuptools wheel --break-system-packages
@@ -56,73 +54,65 @@ pip install --upgrade pip setuptools wheel --break-system-packages
 3️⃣ Installer les dépendances
 pip install -r requirements.txt --break-system-packages
 
-4️⃣ Activer 1-Wire
+4️⃣ Activer 1-Wire et I²C (pour le DS18B20)
 sudo raspi-config
 # Interface Options → 1-Wire → Enable
+# Interface Options → I2C → Enable
 
-5️⃣ Lancer le script
+5️⃣ Activer la connexion 4G (Air780E – Sunrise)
+
+L’Air780E se connecte automatiquement via son interface RNDIS (eth1).
+Pour l’activer manuellement :
+
+sudo ip link set eth1 up
+sudo dhclient eth1
+
+
+Vérifie que tu obtiens une IP :
+
+ip a show eth1
+
+
+Si tu vois une ligne comme :
+
+inet 192.168.10.2/24 brd 192.168.10.255 scope global dynamic noprefixroute eth1
+
+
+➡️ La connexion 4G Sunrise est active 🎉
+
+Teste :
+
+ping -c 4 8.8.8.8
+
+6️⃣ Lancer le script principal
 source venv/bin/activate
 python 4gmerged.py
 
-📡 Connexion 4G (Air780E)
 
-Créer le fichier /etc/ppp/peers/air780e :
-
-/dev/ttyUSB2 115200
-connect "/usr/sbin/chat -v -f /etc/chatscripts/air780e"
-noipdefault
-usepeerdns
-defaultroute
-persist
-noauth
-
-
-Créer /etc/chatscripts/air780e :
-
-ABORT "BUSY"
-ABORT "NO CARRIER"
-ABORT "ERROR"
-"" AT
-OK ATE0
-OK AT+CGDCONT=1,"IP","your.apn.here"
-OK ATD*99#
-CONNECT ""
-
-
-Remplace your.apn.here par l’APN de ton opérateur (ex: gprs.swisscom.ch, internet, etc.)
-
-Démarrer la connexion :
-
-sudo pon air780e
-
-
-Vérifier :
-
-ifconfig ppp0
-ping -c 4 8.8.8.8
-
-
-Couper la connexion :
-
-sudo poff air780e
+Les capteurs de température (DS18B20) et de poids (HX711) enverront alors leurs données vers InfluxDB Cloud.
 
 🪫 Alimentation solaire (UPS DFRobot FIT0992)
 
 En cours d’intégration :
-lecture de la tension batterie et état de charge via I²C (0x36).
+→ lecture de la tension batterie et état de charge via I²C (adresse 0x36).
 
 🔁 Automatisation (exécution au démarrage)
 
-Ajouter dans /etc/rc.local avant exit 0 :
+Pour que tout démarre automatiquement au boot :
 
-(sleep 15 && bash -c 'cd /home/kilia/ruches-connectees && source venv/bin/activate && python 4gmerged.py >> /var/log/ruches.log 2>&1') &
+sudo nano /etc/rc.local
+
+
+Ajoute avant exit 0 :
+
+(sleep 20 && bash -c 'cd /home/kilia/ruches-connectees && source venv/bin/activate && bash connect_4g.sh && python 4gmerged.py >> /var/log/ruches.log 2>&1') &
 
 🧪 Dépannage rapide
 Problème	Diagnostic
 Cannot determine SOC peripheral base address	Utiliser rpi-lgpio au lieu de RPi.GPIO
-❌ Aucun capteur DS18B20 trouvé	Vérifier GPIO 4 + résistance 4.7kΩ
-❌ Erreur envoi InfluxDB	Connexion 4G ou Wi-Fi non active
-WARNING:root:setting gain ...	Normal, ignorable (hx711 calibration)
+❌ Aucun capteur DS18B20 trouvé	Vérifier câblage GPIO 4 + résistance 4.7 kΩ
+❌ Erreur envoi InfluxDB	Vérifier la connexion 4G (eth1)
+WARNING:root:setting gain...	Normal, ignorable (HX711 calibration)
 🧰 Environnement logiciel validé
 rpi-lgpio==0.6
 lgpio==0.2.2.0
@@ -134,11 +124,15 @@ smbus2==0.4.2
 
 URL : https://us-east-1-1.aws.cloud2.influxdata.com
 
-Org : CCA Entremont
+Organisation : CCA Entremont
 
 Bucket : Ruches_Test
 
 🧑‍💻 Auteur
 
-Projet CCA Entremont – Développement par Kilian Léger +41 79 583 77 63
-Gestion des ruches connectées, monitoring poids/température via 4G + solaire.
+Projet CCA Entremont – Développement par Kilian Léger
+Gestion des ruches connectées : monitoring poids / température via 4G + solaire.
+
+📞 +41 79 583 77 63
+📡 Air780E – Sunrise LTE
+🌞 Alimentation FIT0992 + panneau solaire
