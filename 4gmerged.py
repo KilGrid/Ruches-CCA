@@ -1,207 +1,172 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-4g_capteurs.py — Lecture des capteurs (température, poids, batterie)
-et envoi vers InfluxDB v2 via 4G (Air780E)
+Ruches Connectées CCA Entremont
+---------------------------------
+Mesure de température, poids, tension batterie
+et envoi vers InfluxDB Cloud via 4G (Air780E)
+
+Compatible Raspberry Pi 5 + HAT FIT0992
 """
 
 import time
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-import subprocess
+import json
 import glob
+import requests
+import subprocess
+import statistics
+import smbus2
 import RPi.GPIO as GPIO
 from hx711 import HX711
-import smbus2
-import statistics
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
-# --- CONFIG INFLUXDB ---
-INFLUX_URL   = "https://us-east-1-1.aws.cloud2.influxdata.com"
-INFLUX_ORG   = "CCA Entremont"
-INFLUX_BUCKET= "Ruches_Test"
-INFLUX_TOKEN = "EuA5d0tQQw_Doo_ZJYmh02xZ4rkGVaebAp9SCD08YO_Ry2kdBVucAPw_CvZumOxPKN7un_zSWzUUo6QvRBaY2Q=="
 
-DEVICE = "ruche-01"
-SITE   = "cabane_xyz"
-INTERVAL = 60  # secondes entre deux envois
+# --- CHARGEMENT CONFIGURATION ---
+with open("config.json", "r") as f:
+    CONFIG = json.load(f)
 
-# --- CONFIG CAPTEURS ---
-HX711_DT = 5     # Pin DT (données)
-HX711_SCK = 6    # Pin SCK (horloge)
-scale_factor = 92  # Facteur de calibration
-offset = 0         # Valeur de tare
+DEVICE = CONFIG["device"]
+SITE = CONFIG["site"]
+INTERVAL = CONFIG["interval"]
 
-# --- CONFIG BATTERIE (FIT0992 - MAX17048) ---
-I2C_ADDR_BAT = 0x36
+INFLUX_URL = CONFIG["influx_url"].rstrip("/")
+INFLUX_ORG = CONFIG["influx_org"]
+INFLUX_BUCKET = CONFIG["influx_bucket"]
+INFLUX_TOKEN = CONFIG["influx_token"]
 
-# --- SETUP INFLUXDB ---
-WRITE_ENDPOINT = INFLUX_URL.rstrip("/") + "/api/v2/write"
+# --- INFLUXDB SETUP ---
+WRITE_ENDPOINT = f"{INFLUX_URL}/api/v2/write"
 PARAMS = {"org": INFLUX_ORG, "bucket": INFLUX_BUCKET, "precision": "s"}
 HEADERS = {
     "Authorization": f"Token {INFLUX_TOKEN}",
-    "Content-Type": "text/plain; charset=utf-8",
+    "Content-Type": "text/plain; charset=utf-8"
 }
 
-# --- SESSION HTTP robuste (4G) ---
+# --- CONFIG CAPTEURS ---
+HX711_DT = 5
+HX711_SCK = 6
+SCALE_FACTOR = 92
+OFFSET = 0
+I2C_ADDR_BAT = 0x36
+
+# --- HTTP SESSION ROBUSTE ---
 session = requests.Session()
 retry = Retry(total=5, backoff_factor=0.5, status_forcelist=[429, 500, 502, 503, 504])
 session.mount("https://", HTTPAdapter(max_retries=retry))
 
 
-# --- FONCTIONS CAPTEURS ---
+# === CAPTEURS ===
 def charger_modules():
-    """Charge les modules 1-Wire pour le capteur de température"""
+    """Active les modules 1-Wire nécessaires au capteur DS18B20"""
     try:
         subprocess.run(['sudo', 'modprobe', 'w1-gpio'], check=True)
         subprocess.run(['sudo', 'modprobe', 'w1-therm'], check=True)
         print("✅ Modules 1-Wire chargés")
-        return True
-    except Exception as e:
-        print(f"❌ Erreur chargement modules: {str(e)}")
-        return False
+    except subprocess.CalledProcessError:
+        print("⚠️ Impossible d’activer le module 1-Wire (déjà actif ?)")
 
 
 def initialiser_hx711():
     """Initialise la balance HX711"""
-    try:
-        GPIO.setmode(GPIO.BCM)
-        hx = HX711(dout_pin=HX711_DT, pd_sck_pin=HX711_SCK, channel='A', gain=128)
-        hx.reset()
-        print("Mise à zéro en cours... Ne placez aucun poids sur la balance.")
-        raw_data = hx.get_raw_data(times=10)
-        if raw_data:
-            global offset
-            offset = statistics.mean(raw_data)
-            print(f"✅ Balance HX711 initialisée - Valeur de tare: {offset:.2f}")
-            return hx
-        else:
-            print("❌ Erreur : Impossible de lire les données brutes.")
-            return None
-    except Exception as e:
-        print(f"❌ Erreur initialisation HX711: {str(e)}")
-        return None
+    global OFFSET
+    GPIO.setmode(GPIO.BCM)
+    hx = HX711(dout_pin=HX711_DT, pd_sck_pin=HX711_SCK, channel='A', gain=128)
+    hx.reset()
+    print("Mise à zéro... Ne pas poser de charge.")
+    raw_data = hx.get_raw_data(times=10)
+    OFFSET = statistics.mean(raw_data)
+    print(f"✅ Balance HX711 initialisée (tare = {OFFSET:.2f})")
+    return hx
 
 
 def lire_temperature():
-    """Lit la température depuis un capteur DS18B20"""
+    """Lecture température (°C) DS18B20"""
     try:
         capteurs = glob.glob('/sys/bus/w1/devices/28-*')
         if not capteurs:
-            print("❌ Aucun capteur DS18B20 trouvé")
-            return None, "Aucun capteur trouvé"
-        capteur = capteurs[0]
-        with open(f"{capteur}/w1_slave", 'r') as f:
-            data = f.read()
-        temp_line = data.split('\n')[1]
-        temp_c = float(temp_line.split('t=')[1]) / 1000.0
+            return None, "Capteur DS18B20 non trouvé"
+        with open(f"{capteurs[0]}/w1_slave", "r") as f:
+            temp_line = f.readlines()[1]
+        temp_c = float(temp_line.split("t=")[1]) / 1000.0
         return temp_c, "OK"
     except Exception as e:
-        return None, f"Erreur lecture température: {str(e)}"
+        return None, f"Erreur DS18B20: {e}"
 
 
 def lire_poids(hx):
-    """Lit le poids depuis la balance HX711"""
+    """Lecture poids (g) HX711"""
     try:
         raw_data = hx.get_raw_data(times=5)
-        if raw_data:
-            valeur_moyenne = statistics.mean(raw_data)
-            poids_grammes = (valeur_moyenne - offset) / scale_factor
-            return poids_grammes, "OK"
-        else:
-            return None, "Erreur lecture données brutes"
+        valeur_moyenne = statistics.mean(raw_data)
+        poids_grammes = (valeur_moyenne - OFFSET) / SCALE_FACTOR
+        return poids_grammes, "OK"
     except Exception as e:
-        return None, f"Erreur balance: {str(e)}"
+        return None, f"Erreur HX711: {e}"
 
 
 def lire_batterie():
-    """Lit la tension et le niveau de charge de la batterie via le HAT FIT0992"""
+    """Lecture tension (V) et charge (%) via HAT FIT0992"""
     try:
         bus = smbus2.SMBus(1)
-        # Lecture tension
         vcell = bus.read_word_data(I2C_ADDR_BAT, 0x02)
         vcell = ((vcell & 0xFF) << 8) | (vcell >> 8)
         voltage = (vcell >> 4) * 1.25 / 1000.0
-        # Lecture niveau de charge
         soc = bus.read_word_data(I2C_ADDR_BAT, 0x04)
         soc = ((soc & 0xFF) << 8) | (soc >> 8)
         percent = soc / 256.0
         return voltage, percent, "OK"
     except Exception as e:
-        return None, None, f"Erreur lecture batterie: {str(e)}"
+        return None, None, f"Erreur batterie: {e}"
 
 
-def send_point(temp, poids, batt_v, batt_pct, rssi=-72, snr=9.5):
-    """Envoie un point de données vers InfluxDB"""
+# === ENVOI INFLUX ===
+def send_point(temp, poids, batt_v, batt_pct):
+    """Format et envoie les données vers InfluxDB"""
     try:
         ts = int(time.time())
         line = (
-            f"air780e,device={DEVICE},site={SITE} "
+            f"ruches,device={DEVICE},site={SITE} "
             f"temperature={temp:.1f},poids={poids:.2f},"
-            f"battery={batt_v:.3f},battery_pct={batt_pct:.1f},"
-            f"rssi={rssi}i,snr={snr} {ts}"
+            f"battery={batt_v:.3f},battery_pct={batt_pct:.1f} {ts}"
         )
-
         r = session.post(WRITE_ENDPOINT, params=PARAMS, headers=HEADERS,
                          data=line.encode("utf-8"), timeout=10)
         r.raise_for_status()
-        print(f"✅ envoyé à {time.strftime('%Y-%m-%d %H:%M:%S')} : {line}")
-        return True
+        print(f"✅ Données envoyées ({time.strftime('%H:%M:%S')})")
     except Exception as e:
         print(f"❌ Erreur envoi InfluxDB: {e}")
-        return False
 
 
-# --- MAIN ---
+# === MAIN LOOP ===
 def main():
-    print("🌡️⚖️🔋 Mesure et envoi 4G vers InfluxDB - Raspberry Pi 5")
+    print("🌡️⚖️🔋 Ruche connectée CCA — démarrage")
     print("=" * 60)
 
-    if not charger_modules():
-        return
-
+    charger_modules()
     hx = initialiser_hx711()
-    if not hx:
-        return
 
-    print("\n" + "=" * 60)
-    print("🚀 Démarrage des mesures et envois 4G...")
-    print("-" * 60)
-    print("⏳ Démarrage envoi périodique vers InfluxDB… (CTRL+C pour arrêter)")
+    compteur = 1
+    while True:
+        print(f"\n📊 Mesure #{compteur}")
+        temp, msg_t = lire_temperature()
+        poids, msg_p = lire_poids(hx)
+        batt_v, batt_pct, msg_b = lire_batterie()
 
-    try:
-        compteur = 1
-        while True:
-            print(f"\n📊 Mesure #{compteur}")
+        if all(v is not None for v in [temp, poids, batt_v]):
+            print(f"🌡️ {temp:.1f} °C | ⚖️ {poids:.2f} g | 🔋 {batt_v:.3f} V ({batt_pct:.1f}%)")
+            send_point(temp, poids, batt_v, batt_pct)
+        else:
+            print(f"⚠️ Lecture incomplète: {msg_t}, {msg_p}, {msg_b}")
 
-            temp, msg_temp = lire_temperature()
-            poids, msg_poids = lire_poids(hx)
-            batt_v, batt_pct, msg_batt = lire_batterie()
-
-            if temp is not None and poids is not None and batt_v is not None:
-                print(f"🌡️ Température: {temp:.1f}°C")
-                print(f"⚖️ Poids: {poids:.2f} g")
-                print(f"🔋 Batterie: {batt_v:.3f} V ({batt_pct:.1f}%)")
-
-                succes = send_point(temp, poids, batt_v, batt_pct)
-                if not succes:
-                    print("⚠️ Échec d'envoi, attente avant réessai...")
-                    time.sleep(10)
-            else:
-                print(f"❌ Erreur capteurs - Temp: {msg_temp}, Poids: {msg_poids}, Batt: {msg_batt}")
-                print("📡 Pas d'envoi à cause des erreurs capteurs")
-
-            print(f"\n⏱️ Attente {INTERVAL} secondes avant prochaine mesure...")
-            print("-" * 60)
-            compteur += 1
-            time.sleep(INTERVAL)
-
-    except KeyboardInterrupt:
-        print("\n👋 Programme arrêté par l'utilisateur")
-    finally:
-        GPIO.cleanup()
-        print("✅ Nettoyage GPIO effectué")
+        compteur += 1
+        print(f"⏳ Attente {INTERVAL} s avant la prochaine mesure...")
+        time.sleep(INTERVAL)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        GPIO.cleanup()
+        print("\n👋 Arrêt manuel, GPIO libérés.")
