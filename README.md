@@ -1,6 +1,6 @@
 # 🐝 Ruches Connectées – Projet CCA Entremont
 
-Ce projet vise à déployer des **ruches connectées autonomes** capables de mesurer la **température interne**, le **poids de la ruche**, et le **niveau de charge batterie**, puis d’envoyer ces données en **temps réel vers InfluxDB Cloud via une connexion 4G**.  
+Ce projet vise à déployer des **ruches connectées autonomes** capables de mesurer la **température interne**, le **poids de la ruche** et la **tension batterie**, puis d’envoyer ces données en **temps réel vers InfluxDB Cloud via une connexion 4G**.  
 L’alimentation est assurée par un **HAT solaire UPS DFRobot FIT0992**.
 
 ---
@@ -32,15 +32,15 @@ L’alimentation est assurée par un **HAT solaire UPS DFRobot FIT0992**.
 
 - Lecture du **poids** via HX711  
 - Lecture de la **température** via DS18B20  
-- Lecture de la **tension batterie** via FIT0992 (I²C 0x36)  
+- Lecture de la **tension et charge batterie** via FIT0992 (I²C 0x36)  
 - Envoi périodique (60 s) vers **InfluxDB Cloud**  
-- Gestion automatique de la **connexion 4G**  
-- **Redémarrage automatique** après coupure ou plantage via `systemd`  
-- Code **configurable** via `config.json`
+- Gestion automatique de la **connexion 4G (Air780E)**  
+- **Reprise automatique** après coupure de courant ou plantage (`systemd`)  
+- Configuration simplifiée via `config.json`  
 
 ---
 
-## ⚙️ Installation manuelle (si non automatisée)
+## ⚙️ Installation manuelle (méthode classique)
 
 ### 1️⃣ Cloner le dépôt
 ```bash
@@ -64,7 +64,7 @@ bash
 Copier le code
 sudo raspi-config
 # Interface Options → 1-Wire → Enable
-# Interface Options → I2C → Enable
+# Interface Options → I²C → Enable
 5️⃣ Activer la connexion 4G (Air780E – Sunrise)
 L’Air780E se connecte automatiquement via son interface RNDIS (eth1).
 
@@ -81,8 +81,7 @@ sql
 Copier le code
 inet 192.168.10.2/24 brd 192.168.10.255 scope global dynamic noprefixroute eth1
 ➡️ La connexion 4G Sunrise est active 🎉
-
-Teste :
+Teste avec :
 
 bash
 Copier le code
@@ -95,13 +94,13 @@ python 4gmerged.py
 Les capteurs DS18B20, HX711 et la batterie FIT0992 enverront leurs données vers InfluxDB Cloud.
 
 🚀 Déploiement automatique (recommandé)
-Pour configurer automatiquement une nouvelle ruche (clone, venv, dépendances, service auto-démarrage) :
+Pour installer automatiquement une nouvelle ruche (clone, venv, dépendances, service systemd) :
 
 bash
 Copier le code
 curl -fsSL https://raw.githubusercontent.com/KilGrid/Ruches-CCA/main/deploy.sh | bash
 ➡️ En quelques minutes, la ruche est prête à fonctionner.
-Les logs sont enregistrés dans :
+Les logs sont disponibles ici :
 
 bash
 Copier le code
