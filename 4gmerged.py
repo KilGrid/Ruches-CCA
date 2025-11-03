@@ -20,6 +20,9 @@ import RPi.GPIO as GPIO
 from hx711 import HX711
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import logging
+logging.getLogger().setLevel(logging.ERROR)
+
 
 
 # --- CHARGEMENT CONFIGURATION ---
