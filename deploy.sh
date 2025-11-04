@@ -1,11 +1,6 @@
 #!/bin/bash
 # ============================================================
 # 🚀 Script de déploiement automatique - Ruches CCA Entremont
-# ------------------------------------------------------------
-# Ce script installe et configure entièrement une ruche :
-# - Clone le dépôt GitHub
-# - Installe Python + venv + dépendances
-# - Configure systemd pour démarrage automatique
 # ============================================================
 
 set -e  # stoppe si une erreur survient
@@ -22,7 +17,7 @@ cd ~
 git clone https://github.com/KilGrid/Ruches-CCA.git ruches-connectees
 cd ruches-connectees
 
-# 3️⃣ Création de l'environnement virtuel
+# 3️⃣ Création du venv Python
 echo "🐍 Création du venv Python..."
 python3 -m venv venv
 source venv/bin/activate
@@ -46,12 +41,12 @@ Description=Ruche Connectée CCA - Mesure & Envoi InfluxDB
 After=network-online.target
 
 [Service]
-ExecStart=/bin/bash -c 'cd /home/kilia/ruches-connectees && source venv/bin/activate && python 4gmerged.py'
+User=kilia
 WorkingDirectory=/home/kilia/ruches-connectees
+ExecStart=/home/kilia/ruches-connectees/venv/bin/python 4gmerged.py
 StandardOutput=append:/var/log/ruches.log
 StandardError=append:/var/log/ruches.log
 Restart=always
-User=kilia
 
 [Install]
 WantedBy=multi-user.target
