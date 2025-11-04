@@ -3,7 +3,7 @@
   "site": "cca sembrancher",
   "interval": 60,
   "influx_url": "https://us-east-1-1.aws.cloud2.influxdata.com",
-  "influx_org": "CCA Entremont",
+  "influx_org": "CCAEntremont",
   "influx_bucket": "Ruches_Test",
   "influx_token": "EuA5d0tQQw_Doo_ZJYmh02xZ4rkGVaebAp9SCD08YO_Ry2kdBVucAPw_CvZumOxPKN7un_zSWzUUo6QvRBaY2Q=="
 }
