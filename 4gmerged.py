@@ -133,12 +133,14 @@ def send_point(temp, poids, batt_v, batt_pct):
             f"temperature={temp:.1f},poids={poids:.2f},"
             f"battery={batt_v:.3f},battery_pct={batt_pct:.1f} {ts}"
         )
+        print(f"DEBUG → {line}")   # ✅ AJOUT ICI
         r = session.post(WRITE_ENDPOINT, params=PARAMS, headers=HEADERS,
                          data=line.encode("utf-8"), timeout=10)
         r.raise_for_status()
         print(f"✅ Données envoyées ({time.strftime('%H:%M:%S')})")
     except Exception as e:
         print(f"❌ Erreur envoi InfluxDB: {e}")
+
 
 
 # === MAIN LOOP ===
