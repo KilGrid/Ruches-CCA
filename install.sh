@@ -3,7 +3,6 @@
 # Installation Auto - Ruche Connectée CCA Entremont
 # ==========================================================
 set -e
-
 REPO_DIR="$HOME/ruches-connectees"
 SERVICE_NAME="ruches.service"
 
@@ -44,12 +43,13 @@ StartLimitIntervalSec=0
 [Service]
 User=$USER
 WorkingDirectory=$REPO_DIR
+Environment="PYTHONUNBUFFERED=1"
 ExecStartPre=/bin/sleep 15
 ExecStart=$REPO_DIR/venv/bin/python -u 4gmerged.py
-StandardOutput=append:/var/log/ruches.log
-StandardError=append:/var/log/ruches.log
+StandardOutput=journal
+StandardError=journal
 Restart=always
-RestartSec=5
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
@@ -60,6 +60,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable $SERVICE_NAME
 sudo systemctl restart $SERVICE_NAME
 
+echo ""
 echo "Installation terminée."
-echo "Logs :  tail -f /var/log/ruches.log"
+echo "Logs :   sudo journalctl -u $SERVICE_NAME -f"
 echo "Status : sudo systemctl status $SERVICE_NAME"
