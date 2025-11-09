@@ -125,14 +125,14 @@ def lire_batterie():
 
 
 # === ENVOI INFLUX ===
-def send_point(temp, poids, batt_v, batt_pct):
+def send_point(temp, poids, batt_v, batt_pct, temp_cpu):
     """Format et envoie les données vers InfluxDB"""
     try:
         ts = int(time.time())
         line = (
             f"ruches,device={DEVICE},site={SITE} "
             f"temperature={temp:.1f},poids={poids:.2f},"
-            f"battery={batt_v:.3f},battery_pct={batt_pct:.1f} {ts}"
+            f"battery={batt_v:.3f},battery_pct={batt_pct:.1f} {ts},"
             f"cpu_temp={temp_cpu:.1f} {ts}"
         )
         print(f"DEBUG → {line}")   # ✅ AJOUT ICI
@@ -172,7 +172,7 @@ def main():
 
         if all(v is not None for v in [temp, poids, batt_v]):
             print(f"🌡️ {temp:.1f} °C | ⚖️ {poids:.2f} g | 🔋 {batt_v:.3f} V ({batt_pct:.1f}%)")
-            send_point(temp, poids, batt_v, batt_pct)
+            send_point(temp, poids, batt_v, batt_pct, temp_cpu)
         else:
             print(f"⚠️ Lecture incomplète: {msg_t}, {msg_p}, {msg_b}")
 
