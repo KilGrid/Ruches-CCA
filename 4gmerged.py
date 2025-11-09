@@ -21,6 +21,7 @@ from hx711 import HX711
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import logging
+import os
 logging.getLogger().setLevel(logging.ERROR)
 
 
@@ -141,6 +142,15 @@ def send_point(temp, poids, batt_v, batt_pct):
     except Exception as e:
         print(f"❌ Erreur envoi InfluxDB: {e}")
 
+def lire_temperature_cpu():
+    """Retourne la température CPU en °C"""
+    try:
+        with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
+            temp_millideg = int(f.read().strip())
+        return round(temp_millideg / 1000.0, 1)
+    except Exception as e:
+        print(f"❌ Erreur lecture température CPU: {e}")
+        return None
 
 
 # === MAIN LOOP ===
@@ -157,6 +167,7 @@ def main():
         temp, msg_t = lire_temperature()
         poids, msg_p = lire_poids(hx)
         batt_v, batt_pct, msg_b = lire_batterie()
+        temp_cpu = lire_temperature_cpu()
 
         if all(v is not None for v in [temp, poids, batt_v]):
             print(f"🌡️ {temp:.1f} °C | ⚖️ {poids:.2f} g | 🔋 {batt_v:.3f} V ({batt_pct:.1f}%)")
