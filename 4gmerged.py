@@ -133,6 +133,7 @@ def send_point(temp, poids, batt_v, batt_pct):
             f"ruches,device={DEVICE},site={SITE} "
             f"temperature={temp:.1f},poids={poids:.2f},"
             f"battery={batt_v:.3f},battery_pct={batt_pct:.1f} {ts}"
+            f"cpu_temp={temp_cpu:.1f} {ts}"
         )
         print(f"DEBUG → {line}")   # ✅ AJOUT ICI
         r = session.post(WRITE_ENDPOINT, params=PARAMS, headers=HEADERS,
