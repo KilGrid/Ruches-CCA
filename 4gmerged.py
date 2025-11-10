@@ -143,27 +143,79 @@ def lire_batterie():
     except Exception as e:
         return None, None, f"Erreur batterie: {e}"
 
+# === BUFFER LOCAL (OFFLINE STORAGE) ===
+BUFFER_FILE = "buffer.txt"
+
+def enregistrer_dans_buffer(line):
+    """Ajoute une ligne de mesure dans le buffer local"""
+    try:
+        with open(BUFFER_FILE, "a") as f:
+            f.write(line + "\n")
+        print("💾 Mesure sauvegardée localement (offline)")
+    except Exception as e:
+        print(f"⚠️ Erreur écriture buffer: {e}")
+
+
+def envoyer_buffer():
+    """Tente d’envoyer toutes les mesures sauvegardées"""
+    if not os.path.exists(BUFFER_FILE):
+        return
+    try:
+        with open(BUFFER_FILE, "r") as f:
+            lignes = [l.strip() for l in f.readlines() if l.strip()]
+        if not lignes:
+            return
+        print(f"📤 Tentative d’envoi du buffer ({len(lignes)} mesures)...")
+
+        for line in lignes:
+            try:
+                r = session.post(WRITE_ENDPOINT, params=PARAMS, headers=HEADERS,
+                                 data=line.encode("utf-8"), timeout=10)
+                r.raise_for_status()
+            except Exception as e:
+                print(f"⚠️ Échec envoi ligne buffer: {e}")
+                break
+        else:
+            print("✅ Buffer vidé avec succès.")
+            os.remove(BUFFER_FILE)
+    except Exception as e:
+        print(f"⚠️ Erreur lecture/envoi buffer: {e}")
 
 # === ENVOI INFLUX ===
 def send_point(temp, poids, batt_v, batt_pct, temp_cpu):
-    """Format et envoie les données vers InfluxDB"""
+    """Format et envoie les données vers InfluxDB, avec buffer local"""
+    ts = int(time.time())
+    line = (
+        f"ruches,device={DEVICE},site={SITE} "
+        f"temperature={temp:.1f},"
+        f"poids={poids:.2f},"
+        f"battery={batt_v:.3f},"
+        f"battery_pct={batt_pct:.1f},"
+        f"cpu_temp={temp_cpu:.1f} {ts}"
+    )
+    print(f"DEBUG → {line}")
+
+    # Vérifie la connexion
     try:
-        ts = int(time.time())
-        line = (
-            f"ruches,device={DEVICE},site={SITE} "
-            f"temperature={temp:.1f},"
-            f"poids={poids:.2f},"
-            f"battery={batt_v:.3f},"
-            f"battery_pct={batt_pct:.1f},"
-            f"cpu_temp={temp_cpu:.1f} {ts}"
-        )
-        print(f"DEBUG → {line}")   # ✅ AJOUT ICI
+        subprocess.run(["ping", "-c", "1", "-W", "2", "8.8.8.8"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    except subprocess.CalledProcessError:
+        print("⚠️ 4G absente — mesure stockée localement.")
+        enregistrer_dans_buffer(line)
+        return False
+
+    # Envoi en ligne
+    try:
         r = session.post(WRITE_ENDPOINT, params=PARAMS, headers=HEADERS,
                          data=line.encode("utf-8"), timeout=10)
         r.raise_for_status()
         print(f"✅ Données envoyées ({time.strftime('%H:%M:%S')})")
+        envoyer_buffer()  # 👈 tente de vider le buffer après chaque succès
+        return True
     except Exception as e:
-        print(f"❌ Erreur envoi InfluxDB: {e}")
+        print(f"❌ Erreur envoi InfluxDB: {e} → sauvegarde locale.")
+        enregistrer_dans_buffer(line)
+        return False
 
 def lire_temperature_cpu():
     """Retourne la température CPU en °C"""
