@@ -63,19 +63,21 @@ def attendre_connexion(timeout=180, retry_delay=5):
     start = time.time()
     while True:
         try:
-            # Ping rapide vers Google DNS (IPv4)
-            subprocess.run(["ping", "-c", "1", "-W", "2", "8.8.8.8"],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(
+                ["ping", "-c", "1", "-W", "2", "8.8.8.8"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True,   # 👈 important
+            )
             print("✅ Connexion 4G opérationnelle")
             return True
-        except Exception:
+        except subprocess.CalledProcessError:
             pass
         if time.time() - start > timeout:
             print("⚠️ Connexion 4G indisponible après délai, poursuite du programme.")
             return False
         print("⏳ En attente de la 4G...")
         time.sleep(retry_delay)
-
 
 
 # === CAPTEURS ===
