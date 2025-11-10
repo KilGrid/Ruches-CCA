@@ -146,15 +146,17 @@ def lire_batterie():
 # === BUFFER LOCAL (OFFLINE STORAGE) ===
 BUFFER_FILE = "buffer.txt"
 
-def enregistrer_dans_buffer(line):
-    """Ajoute une ligne de mesure dans le buffer local"""
+def enregistrer_dans_buffer(line, max_size_bytes=1_000_000):
+    """Ajoute une ligne de mesure dans le buffer local avec limite de taille"""
     try:
+        if os.path.exists(BUFFER_FILE) and os.path.getsize(BUFFER_FILE) > max_size_bytes:
+            print("⚠️ Buffer plein, suppression des anciennes données.")
+            os.remove(BUFFER_FILE)
         with open(BUFFER_FILE, "a") as f:
             f.write(line + "\n")
         print("💾 Mesure sauvegardée localement (offline)")
     except Exception as e:
         print(f"⚠️ Erreur écriture buffer: {e}")
-
 
 def envoyer_buffer():
     """Tente d’envoyer toutes les mesures sauvegardées"""
