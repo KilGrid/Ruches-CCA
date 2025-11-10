@@ -180,8 +180,9 @@ def main():
     print("=" * 60)
 
     charger_modules()
-    hx = initialiser_hx711()
     attendre_connexion() 
+    hx = initialiser_hx711()
+    
 
     compteur = 1
     while True:
