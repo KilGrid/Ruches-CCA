@@ -24,8 +24,6 @@ import logging
 import os
 logging.getLogger().setLevel(logging.ERROR)
 
-
-
 # --- CHARGEMENT CONFIGURATION ---
 with open("config.json", "r") as f:
     CONFIG = json.load(f)
@@ -58,6 +56,26 @@ I2C_ADDR_BAT = 0x36
 session = requests.Session()
 retry = Retry(total=5, backoff_factor=0.5, status_forcelist=[429, 500, 502, 503, 504])
 session.mount("https://", HTTPAdapter(max_retries=retry))
+
+def attendre_connexion(timeout=180, retry_delay=5):
+    """Attend que la connexion Internet 4G soit disponible"""
+    print("🌐 Vérification de la connexion 4G...")
+    start = time.time()
+    while True:
+        try:
+            # Ping rapide vers Google DNS (IPv4)
+            subprocess.run(["ping", "-c", "1", "-W", "2", "8.8.8.8"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("✅ Connexion 4G opérationnelle")
+            return True
+        except Exception:
+            pass
+        if time.time() - start > timeout:
+            print("⚠️ Connexion 4G indisponible après délai, poursuite du programme.")
+            return False
+        print("⏳ En attente de la 4G...")
+        time.sleep(retry_delay)
+
 
 
 # === CAPTEURS ===
@@ -163,6 +181,7 @@ def main():
 
     charger_modules()
     hx = initialiser_hx711()
+    attendre_connexion() 
 
     compteur = 1
     while True:
