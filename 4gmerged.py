@@ -59,7 +59,7 @@ session.mount("https://", HTTPAdapter(max_retries=retry))
 
 def attendre_connexion(timeout=180, retry_delay=5):
     """Attend que la connexion Internet 4G soit disponible"""
-    print("🌐 Vérification de la connexion 4G...")
+    print("Vérification de la connexion 4G...")
     start = time.time()
     while True:
         try:
@@ -67,16 +67,16 @@ def attendre_connexion(timeout=180, retry_delay=5):
                 ["ping", "-c", "1", "-W", "2", "8.8.8.8"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                check=True,   # 👈 important
+                check=True,   # important
             )
-            print("✅ Connexion 4G opérationnelle")
+            print("Connexion 4G opérationnelle")
             return True
         except subprocess.CalledProcessError:
             pass
         if time.time() - start > timeout:
-            print("⚠️ Connexion 4G indisponible après délai, poursuite du programme.")
+            print("Connexion 4G indisponible après délai, poursuite du programme.")
             return False
-        print("⏳ En attente de la 4G...")
+        print("En attente de la 4G...")
         time.sleep(retry_delay)
 
 
@@ -86,9 +86,9 @@ def charger_modules():
     try:
         subprocess.run(['sudo', 'modprobe', 'w1-gpio'], check=True)
         subprocess.run(['sudo', 'modprobe', 'w1-therm'], check=True)
-        print("✅ Modules 1-Wire chargés")
+        print("Modules 1-Wire chargés")
     except subprocess.CalledProcessError:
-        print("⚠️ Impossible d’activer le module 1-Wire (déjà actif ?)")
+        print("Impossible d’activer le module 1-Wire (déjà actif ?)")
 
 
 def initialiser_hx711():
@@ -100,7 +100,7 @@ def initialiser_hx711():
     print("Mise à zéro... Ne pas poser de charge.")
     raw_data = hx.get_raw_data(times=10)
     OFFSET = statistics.mean(raw_data)
-    print(f"✅ Balance HX711 initialisée (tare = {OFFSET:.2f})")
+    print(f"Balance HX711 initialisée (tare = {OFFSET:.2f})")
     return hx
 
 
@@ -150,13 +150,13 @@ def enregistrer_dans_buffer(line, max_size_bytes=1_000_000):
     """Ajoute une ligne de mesure dans le buffer local avec limite de taille"""
     try:
         if os.path.exists(BUFFER_FILE) and os.path.getsize(BUFFER_FILE) > max_size_bytes:
-            print("⚠️ Buffer plein, suppression des anciennes données.")
+            print("Buffer plein, suppression des anciennes données.")
             os.remove(BUFFER_FILE)
         with open(BUFFER_FILE, "a") as f:
             f.write(line + "\n")
-        print("💾 Mesure sauvegardée localement (offline)")
+        print("Mesure sauvegardée localement (offline)")
     except Exception as e:
-        print(f"⚠️ Erreur écriture buffer: {e}")
+        print(f"Erreur écriture buffer: {e}")
 
 def envoyer_buffer():
     """Tente d’envoyer toutes les mesures sauvegardées"""
@@ -167,7 +167,7 @@ def envoyer_buffer():
             lignes = [l.strip() for l in f.readlines() if l.strip()]
         if not lignes:
             return
-        print(f"📤 Tentative d’envoi du buffer ({len(lignes)} mesures)...")
+        print(f"Tentative d’envoi du buffer ({len(lignes)} mesures)...")
 
         for line in lignes:
             try:
@@ -175,13 +175,13 @@ def envoyer_buffer():
                                  data=line.encode("utf-8"), timeout=10)
                 r.raise_for_status()
             except Exception as e:
-                print(f"⚠️ Échec envoi ligne buffer: {e}")
+                print(f"Échec envoi ligne buffer: {e}")
                 break
         else:
-            print("✅ Buffer vidé avec succès.")
+            print("Buffer vidé avec succès.")
             os.remove(BUFFER_FILE)
     except Exception as e:
-        print(f"⚠️ Erreur lecture/envoi buffer: {e}")
+        print(f"Erreur lecture/envoi buffer: {e}")
 
 # === ENVOI INFLUX ===
 def send_point(temp, poids, batt_v, batt_pct, temp_cpu):
@@ -202,7 +202,7 @@ def send_point(temp, poids, batt_v, batt_pct, temp_cpu):
         subprocess.run(["ping", "-c", "1", "-W", "2", "8.8.8.8"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
     except subprocess.CalledProcessError:
-        print("⚠️ 4G absente — mesure stockée localement.")
+        print("4G absente — mesure stockée localement.")
         enregistrer_dans_buffer(line)
         return False
 
@@ -211,11 +211,11 @@ def send_point(temp, poids, batt_v, batt_pct, temp_cpu):
         r = session.post(WRITE_ENDPOINT, params=PARAMS, headers=HEADERS,
                          data=line.encode("utf-8"), timeout=10)
         r.raise_for_status()
-        print(f"✅ Données envoyées ({time.strftime('%H:%M:%S')})")
-        envoyer_buffer()  # 👈 tente de vider le buffer après chaque succès
+        print(f"Données envoyées ({time.strftime('%H:%M:%S')})")
+        envoyer_buffer()  # ente de vider le buffer après chaque succès
         return True
     except Exception as e:
-        print(f"❌ Erreur envoi InfluxDB: {e} → sauvegarde locale.")
+        print(f"Erreur envoi InfluxDB: {e} → sauvegarde locale.")
         enregistrer_dans_buffer(line)
         return False
 
@@ -226,13 +226,13 @@ def lire_temperature_cpu():
             temp_millideg = int(f.read().strip())
         return round(temp_millideg / 1000.0, 1)
     except Exception as e:
-        print(f"❌ Erreur lecture température CPU: {e}")
+        print(f"Erreur lecture température CPU: {e}")
         return None
 
 
 # === MAIN LOOP ===
 def main():
-    print("🌡️⚖️🔋 Ruche connectée CCA — démarrage")
+    print(" Ruche connectée CCA — démarrage")
     print("=" * 60)
 
     charger_modules()
@@ -242,20 +242,20 @@ def main():
 
     compteur = 1
     while True:
-        print(f"\n📊 Mesure #{compteur}")
+        print(f"\n Mesure #{compteur}")
         temp, msg_t = lire_temperature()
         poids, msg_p = lire_poids(hx)
         batt_v, batt_pct, msg_b = lire_batterie()
         temp_cpu = lire_temperature_cpu()
 
         if all(v is not None for v in [temp, poids, batt_v]):
-            print(f"🌡️ {temp:.1f} °C | ⚖️ {poids:.2f} g | 🔋 {batt_v:.3f} V ({batt_pct:.1f}%)")
+            print(f"{temp:.1f} °C |  {poids:.2f} g | {batt_v:.3f} V ({batt_pct:.1f}%)")
             send_point(temp, poids, batt_v, batt_pct, temp_cpu)
         else:
-            print(f"⚠️ Lecture incomplète: {msg_t}, {msg_p}, {msg_b}")
+            print(f" Lecture incomplète: {msg_t}, {msg_p}, {msg_b}")
 
         compteur += 1
-        print(f"⏳ Attente {INTERVAL} s avant la prochaine mesure...")
+        print(f" Attente {INTERVAL} s avant la prochaine mesure...")
         time.sleep(INTERVAL)
 
 
@@ -264,4 +264,4 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         GPIO.cleanup()
-        print("\n👋 Arrêt manuel, GPIO libérés.")
+        print("\n Arrêt manuel, GPIO libérés.")
