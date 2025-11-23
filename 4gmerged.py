@@ -91,17 +91,48 @@ def charger_modules():
         print("Impossible d’activer le module 1-Wire (déjà actif ?)")
 
 
-def initialiser_hx711():
-    """Initialise la balance HX711"""
+def initialiser_hx711(timeout_s=5):
+    """Initialise la balance HX711 sans jamais bloquer définitivement."""
     global OFFSET
     GPIO.setmode(GPIO.BCM)
-    hx = HX711(dout_pin=HX711_DT, pd_sck_pin=HX711_SCK, channel='A', gain=128)
-    hx.reset()
-    print("Mise à zéro... Ne pas poser de charge.")
-    raw_data = hx.get_raw_data(times=10)
-    OFFSET = statistics.mean(raw_data)
-    print(f"Balance HX711 initialisée (tare = {OFFSET:.2f})")
-    return hx
+
+    print("Initialisation HX711...")
+
+    while True:
+        try:
+            hx = HX711(
+                dout_pin=HX711_DT,
+                pd_sck_pin=HX711_SCK,
+                channel='A',
+                gain=128
+            )
+
+            # Tentative de reset (peut bloquer si HX711 / câblage est foireux)
+            start = time.time()
+            print("Mise à zéro... Ne pas poser de charge.")
+            hx.reset()
+
+            # Lecture avec garde-fou de temps
+            def lire_avec_timeout():
+                # petite boucle pour ne pas rester coincé dans get_raw_data trop longtemps
+                while True:
+                    try:
+                        return hx.get_raw_data(times=10)
+                    except Exception:
+                        if time.time() - start > timeout_s:
+                            raise TimeoutError("HX711 bloqué pendant get_raw_data()")
+                        time.sleep(0.1)
+
+            raw_data = lire_avec_timeout()
+            OFFSET = statistics.mean(raw_data)
+            print(f"Balance HX711 initialisée (tare = {OFFSET:.2f})")
+            return hx
+
+        except Exception as e:
+            print(f"⚠️ HX711 non prêt : {e} → nouvelle tentative dans 3 s")
+            GPIO.cleanup()
+            time.sleep(3)
+            GPIO.setmode(GPIO.BCM)
 
 
 def lire_temperature():
