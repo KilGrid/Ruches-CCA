@@ -90,51 +90,57 @@ def charger_modules():
     except subprocess.CalledProcessError:
         print("Impossible d’activer le module 1-Wire (déjà actif ?)")
 
+def lire_hx711_brut(dout, sck, timeout_s=0.2):
+    """Lecture non bloquante du HX711."""
+    # Attente du front bas (data ready)
+    t0 = time.time()
+    while GPIO.input(dout) == 1:
+        if time.time() - t0 > timeout_s:
+            raise TimeoutError("HX711 bloqué (DT HIGH)")
+        time.sleep(0.0001)
+
+    # Lecture 24 bits
+    value = 0
+    for _ in range(24):
+        GPIO.output(sck, True)
+        time.sleep(0.000001)
+        value = (value << 1) | GPIO.input(dout)
+        GPIO.output(sck, False)
+        time.sleep(0.000001)
+
+    # Bits de gain
+    GPIO.output(sck, True)
+    time.sleep(0.000001)
+    GPIO.output(sck, False)
+
+    # Convertir signed
+    if value & (1 << 23):
+        value -= 1 << 24
+
+    return value
 
 def initialiser_hx711():
-    """Initialise la balance HX711 avec protection contre blocage."""
     global OFFSET
+
     GPIO.setmode(GPIO.BCM)
+    GPIO.setup(HX711_DT, GPIO.IN)
+    GPIO.setup(HX711_SCK, GPIO.OUT)
 
     print("Initialisation HX711...")
 
     while True:
         try:
-            hx = HX711(
-                dout_pin=HX711_DT,
-                pd_sck_pin=HX711_SCK,
-                channel='A',
-                gain=128
-            )
-
             print("Mise à zéro... Ne pas poser de charge.")
-            hx.reset()
 
-            # Timeout dur : si le HX711 ne répond pas => retry
-            timeout_s = 3
-            t0 = time.time()
-            raw_data = None
+            valeurs = [lire_hx711_brut(HX711_DT, HX711_SCK) for _ in range(10)]
+            OFFSET = statistics.mean(valeurs)
 
-            while raw_data is None:
-                try:
-                    raw_data = hx.get_raw_data(times=5)
-                except Exception:
-                    raw_data = None
-
-                if time.time() - t0 > timeout_s:
-                    raise TimeoutError("HX711 bloqué (DT reste HIGH)")
-
-                time.sleep(0.1)
-
-            OFFSET = statistics.mean(raw_data)
             print(f"Balance HX711 initialisée (tare = {OFFSET:.2f})")
-            return hx
+            return True
 
         except Exception as e:
             print(f"⚠️ HX711 non prêt : {e} → nouvelle tentative dans 2 s")
-            GPIO.cleanup()
             time.sleep(2)
-            GPIO.setmode(GPIO.BCM)
 
 
 def lire_temperature():
@@ -151,26 +157,14 @@ def lire_temperature():
         return None, f"Erreur DS18B20: {e}"
 
 
-def lire_poids(hx):
-    """Lecture poids (g) HX711 avec sécurité et filtrage du bruit."""
+def lire_poids(_):
     try:
-        # Lecture brute (peut lever une exception si HX711 instable)
-        raw_data = hx.get_raw_data(times=10)  # plus fiable que 5
-
-        # Filtre simple : enlever les valeurs absurdes
-        raw_data = [v for v in raw_data if isinstance(v, (int, float))]
-        if not raw_data:
-            return None, "Lecture brute vide ou invalide"
-
-        valeur_moyenne = statistics.mean(raw_data)
-
-        # Conversion en grammes
+        valeurs = [lire_hx711_brut(HX711_DT, HX711_SCK) for _ in range(5)]
+        valeur_moyenne = statistics.mean(valeurs)
         poids_grammes = (valeur_moyenne - OFFSET) / SCALE_FACTOR
 
-        # Rejet des valeurs absurdes (> +/- 20 kg)
-        # (évite les pics dus aux perturbations électriques)
         if abs(poids_grammes) > 20000:
-            return None, f"Poids aberrant détecté: {poids_grammes:.2f} g"
+            return None, f"Poids aberrant: {poids_grammes:.2f} g"
 
         return poids_grammes, "OK"
 
