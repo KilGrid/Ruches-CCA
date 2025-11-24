@@ -110,7 +110,7 @@ def initialiser_hx711():
             print("Mise à zéro... Ne pas poser de charge.")
             hx.reset()
 
-            # Lecture brute mais avec timeout dur
+            # Timeout dur : si le HX711 ne répond pas => retry
             timeout_s = 3
             t0 = time.time()
             raw_data = None
@@ -121,7 +121,6 @@ def initialiser_hx711():
                 except Exception:
                     raw_data = None
 
-                # IMPORTANT : si la lib bloque → ce timeout nous sauve
                 if time.time() - t0 > timeout_s:
                     raise TimeoutError("HX711 bloqué (DT reste HIGH)")
 
@@ -136,6 +135,7 @@ def initialiser_hx711():
             GPIO.cleanup()
             time.sleep(2)
             GPIO.setmode(GPIO.BCM)
+
 
 def lire_temperature():
     """Lecture température (°C) DS18B20"""
