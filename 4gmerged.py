@@ -250,7 +250,7 @@ def envoyer_buffer():
 
 # === ENVOI INFLUX ===
 def send_point(temp, poids, batt_v, batt_pct, temp_cpu):
-    """Format et envoie les données vers InfluxDB, avec buffer local"""
+    """Format et envoie les données vers InfluxDB, avec buffer local."""
     ts = int(time.time())
     line = (
         f"ruches,device={DEVICE},site={SITE} "
@@ -262,10 +262,18 @@ def send_point(temp, poids, batt_v, batt_pct, temp_cpu):
     )
     print(f"DEBUG → {line}")
 
+    # Activation modem 4G
+    modem_on()
+    time.sleep(2)  # Laisser le temps au modem d’obtenir une IP
+
     # Vérifie la connexion
     try:
-        subprocess.run(["ping", "-c", "1", "-W", "2", "8.8.8.8"],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        subprocess.run(
+            ["ping", "-c", "1", "-W", "2", "8.8.8.8"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True
+        )
     except subprocess.CalledProcessError:
         print("4G absente — mesure stockée localement.")
         enregistrer_dans_buffer(line)
@@ -273,16 +281,28 @@ def send_point(temp, poids, batt_v, batt_pct, temp_cpu):
 
     # Envoi en ligne
     try:
-        r = session.post(WRITE_ENDPOINT, params=PARAMS, headers=HEADERS,
-                         data=line.encode("utf-8"), timeout=10)
+        r = session.post(
+            WRITE_ENDPOINT,
+            params=PARAMS,
+            headers=HEADERS,
+            data=line.encode("utf-8"),
+            timeout=10
+        )
         r.raise_for_status()
+
         print(f"Données envoyées ({time.strftime('%H:%M:%S')})")
-        envoyer_buffer()  # ente de vider le buffer après chaque succès
+        envoyer_buffer()  # tenter de vider le buffer après chaque succès
+
+        # Désactivation modem 4G après succès
+        modem_off()
+
         return True
+
     except Exception as e:
         print(f"Erreur envoi InfluxDB: {e} → sauvegarde locale.")
         enregistrer_dans_buffer(line)
         return False
+
 
 def lire_temperature_cpu():
     """Retourne la température CPU en °C"""
@@ -301,28 +321,33 @@ def main():
     print("=" * 60)
 
     charger_modules()
-    attendre_connexion() 
+    attendre_connexion()
     hx = initialiser_hx711()
-    
 
     compteur = 1
     while True:
         print(f"\n Mesure #{compteur}")
+
+        # === LECTURES CAPTEURS ===
         temp, msg_t = lire_temperature()
         poids, msg_p = lire_poids(hx)
         batt_v, batt_pct, msg_b = lire_batterie()
         temp_cpu = lire_temperature_cpu()
 
+        # === DONNÉES COHÉRENTES ? ===
         if all(v is not None for v in [temp, poids, batt_v]):
             print(f"{temp:.1f} °C |  {poids:.2f} g | {batt_v:.3f} V ({batt_pct:.1f}%)")
+
+            # === ENVOI DES DONNÉES ===
             send_point(temp, poids, batt_v, batt_pct, temp_cpu)
+
         else:
             print(f" Lecture incomplète: {msg_t}, {msg_p}, {msg_b}")
 
+        # === PROCHAINE MESURE ===
         compteur += 1
         print(f" Attente {INTERVAL} s avant la prochaine mesure...")
         time.sleep(INTERVAL)
-
 
 if __name__ == "__main__":
     try:
