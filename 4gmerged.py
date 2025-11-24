@@ -91,8 +91,8 @@ def charger_modules():
         print("Impossible d’activer le module 1-Wire (déjà actif ?)")
 
 
-def initialiser_hx711(timeout_s=5):
-    """Initialise la balance HX711 sans jamais bloquer définitivement."""
+def initialiser_hx711():
+    """Initialise la balance HX711 avec protection contre blocage."""
     global OFFSET
     GPIO.setmode(GPIO.BCM)
 
@@ -107,33 +107,34 @@ def initialiser_hx711(timeout_s=5):
                 gain=128
             )
 
-            # Tentative de reset (peut bloquer si HX711 / câblage est foireux)
-            start = time.time()
             print("Mise à zéro... Ne pas poser de charge.")
             hx.reset()
 
-            # Lecture avec garde-fou de temps
-            def lire_avec_timeout():
-                # petite boucle pour ne pas rester coincé dans get_raw_data trop longtemps
+            # Lecture brute mais avec timeout logiciel
+            timeout_s = 3
+            t0 = time.time()
+
+            def lecture_brut():
                 while True:
                     try:
-                        return hx.get_raw_data(times=10)
+                        return hx.get_raw_data(times=5)
                     except Exception:
-                        if time.time() - start > timeout_s:
-                            raise TimeoutError("HX711 bloqué pendant get_raw_data()")
+                        # La lib peut lever, mais si elle bloque -> timeout
+                        if time.time() - t0 > timeout_s:
+                            raise TimeoutError("HX711 bloqué (DT reste HIGH)")
                         time.sleep(0.1)
 
-            raw_data = lire_avec_timeout()
+            raw_data = lecture_brut()
             OFFSET = statistics.mean(raw_data)
+
             print(f"Balance HX711 initialisée (tare = {OFFSET:.2f})")
             return hx
 
         except Exception as e:
-            print(f"⚠️ HX711 non prêt : {e} → nouvelle tentative dans 3 s")
+            print(f"⚠️ HX711 non prêt : {e} → nouvelle tentative dans 2 s")
             GPIO.cleanup()
-            time.sleep(3)
+            time.sleep(2)
             GPIO.setmode(GPIO.BCM)
-
 
 def lire_temperature():
     """Lecture température (°C) DS18B20"""
