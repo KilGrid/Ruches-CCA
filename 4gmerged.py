@@ -151,15 +151,30 @@ def lire_temperature():
 
 
 def lire_poids(hx):
-    """Lecture poids (g) HX711"""
+    """Lecture poids (g) HX711 avec sécurité et filtrage du bruit."""
     try:
-        raw_data = hx.get_raw_data(times=5)
+        # Lecture brute (peut lever une exception si HX711 instable)
+        raw_data = hx.get_raw_data(times=10)  # plus fiable que 5
+
+        # Filtre simple : enlever les valeurs absurdes
+        raw_data = [v for v in raw_data if isinstance(v, (int, float))]
+        if not raw_data:
+            return None, "Lecture brute vide ou invalide"
+
         valeur_moyenne = statistics.mean(raw_data)
+
+        # Conversion en grammes
         poids_grammes = (valeur_moyenne - OFFSET) / SCALE_FACTOR
+
+        # Rejet des valeurs absurdes (> +/- 20 kg)
+        # (évite les pics dus aux perturbations électriques)
+        if abs(poids_grammes) > 20000:
+            return None, f"Poids aberrant détecté: {poids_grammes:.2f} g"
+
         return poids_grammes, "OK"
+
     except Exception as e:
         return None, f"Erreur HX711: {e}"
-
 
 def lire_batterie():
     """Lecture tension (V) et charge (%) via HAT FIT0992"""
