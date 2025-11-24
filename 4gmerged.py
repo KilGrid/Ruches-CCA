@@ -52,6 +52,29 @@ SCALE_FACTOR = 92
 OFFSET = 0
 I2C_ADDR_BAT = 0x36
 
+# --- Gestion du modem 4g pour économiser de la batterie ---
+def modem_off():
+    """Coupe la connexion 4G (RNDIS) pour économiser la batterie."""
+    try:
+        subprocess.run(["sudo", "ip", "link", "set", "eth1", "down"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("4G éteinte pour économie d'énergie")
+    except Exception as e:
+        print(f"Erreur extinction 4G: {e}")
+
+
+def modem_on():
+    """Allume la connexion 4G (RNDIS)."""
+    try:
+        subprocess.run(["sudo", "ip", "link", "set", "eth1", "up"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["sudo", "dhclient", "eth1"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("4G réactivée")
+    except Exception as e:
+        print(f"Erreur activation 4G: {e}")
+
+
 # --- HTTP SESSION ROBUSTE ---
 session = requests.Session()
 retry = Retry(total=5, backoff_factor=0.5, status_forcelist=[429, 500, 502, 503, 504])
