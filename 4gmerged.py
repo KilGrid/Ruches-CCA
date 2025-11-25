@@ -54,25 +54,48 @@ I2C_ADDR_BAT = 0x36
 
 # --- Gestion du modem 4g pour économiser de la batterie ---
 def modem_off():
-    """Coupe la connexion 4G (RNDIS) pour économiser la batterie."""
+    """Coupe proprement la connexion 4G pour éviter les erreurs dhclient."""
     try:
+        # Libère totalement la configuration DHCP
+        subprocess.run(["sudo", "dhclient", "-r", "eth1"],
+                       stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+
+        time.sleep(1)  # laisse dhclient terminer proprement
+
+        # Désactive l'interface
         subprocess.run(["sudo", "ip", "link", "set", "eth1", "down"],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        print("4G éteinte pour économie d'énergie")
+                       stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+
+        print("4G éteinte proprement")
     except Exception as e:
         print(f"Erreur extinction 4G: {e}")
 
-
 def modem_on():
-    """Allume la connexion 4G (RNDIS)."""
+    """Réactive proprement la 4G avec une configuration DHCP propre."""
     try:
+        # Active l'interface
         subprocess.run(["sudo", "ip", "link", "set", "eth1", "up"],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                       stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+
+        time.sleep(1)
+
+        # Libère d'abord tout ancien état DHCP (important !)
+        subprocess.run(["sudo", "dhclient", "-r", "eth1"],
+                       stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+
+        # Redemande une IP propre
         subprocess.run(["sudo", "dhclient", "eth1"],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        print("4G réactivée")
+                       stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+
+        print("4G réactivée proprement")
     except Exception as e:
         print(f"Erreur activation 4G: {e}")
+
 
 
 # --- HTTP SESSION ROBUSTE ---
