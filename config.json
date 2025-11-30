@@ -1,7 +1,7 @@
 {
   "device": "ruche-01",
   "site": "ccasembrancher",
-  "interval": 60,
+  "interval": 600,
   "influx_url": "https://us-east-1-1.aws.cloud2.influxdata.com",
   "influx_org": "CCAEntremont",
   "influx_bucket": "Ruches_Test",
